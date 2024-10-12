@@ -1,6 +1,6 @@
 mod logger;
 
-use std::fs::{self, OpenOptions, File};
+use std::fs::{self, OpenOptions, File, read_to_string};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -19,6 +19,14 @@ struct Cli {
     /// Command which you want to run
     #[arg(short, long, default_value_t=String::from("search"))]
     command: String,
+
+    /// Key for the password/website
+    #[arg(short, long, default_value_t=String::from(""))]
+    key: String,
+
+    /// Value of the password, this will get encrypted
+    #[arg(long, default_value_t=String::from(""))]
+    password: String
 }
 
 fn handle_init_safe(file_path: &Path) -> io::Result<(String)> {
@@ -28,8 +36,7 @@ fn handle_init_safe(file_path: &Path) -> io::Result<(String)> {
         fs::create_dir_all(parent)?;
     }
 
-    let mut file = File::create(&file_path)?;
-    file.write_all(b"Initial content")?;
+    let file = File::create(&file_path)?;
 
     logger::success("Your safe has been initialized successfully!");
     Ok((String::from("Safe initialized")))
@@ -46,6 +53,23 @@ fn add_line_to_file(file_path: &Path, content: &str) -> io::Result<()> {
     Ok(())
 }
 
+fn get_all_safe_keys(file_path: &Path) {
+    let content = read_to_string(file_path).expect("Unable to read file");
+    println!("{}", content);
+}
+
+fn handle_search(file_path: &Path, key_pattern: String) {
+    println!("Looking for password of pattern: {}", key_pattern.to_string());
+    get_all_safe_keys(file_path);
+}
+
+fn handle_add_key(file_path: &Path, key: String, password: String) {
+    println!("Adding key: {}", key);
+
+    let encrypted_line = format!("{}={};", key, password);
+    add_line_to_file(file_path, &encrypted_line);
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
 
@@ -55,18 +79,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("command: {:?}, pattern: {:?}", args.command, args.pattern);
 
-
     let file_path = Path::new(SAFE_CONTENT_PATH);
 
-    if file_path.exists() {
-        let mut file = File::open(&file_path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-    } else {
+    if !file_path.exists() {
+        println!("Creating path...");
         handle_init_safe(file_path);
     }
 
-    add_line_to_file(file_path, "new line added");
+    match String::from(args.command).as_str() {
+        "add" => {
+            println!("handle_add_key!");
+            handle_add_key(file_path, String::from(args.key), String::from(args.password))
+        },
+        "search" => {
+            handle_search(file_path, String::from(args.pattern));
+        },
+        _ => {
+            println!("Not matched...");
+        }
+    }
 
     Ok(())
 }
+
