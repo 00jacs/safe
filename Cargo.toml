@@ -7,3 +7,5 @@ edition = "2021"
 colored = "2.0"
 chrono = "0.4"
 clap = { version = "4.0", features = ["derive"] }
+regex = "1.11.0"
+clipboard = "0.5"

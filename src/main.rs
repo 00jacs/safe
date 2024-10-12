@@ -1,9 +1,12 @@
 mod logger;
 
+use regex::Regex;
+use std::collections::HashMap;
 use std::fs::{self, OpenOptions, File, read_to_string};
-use std::io::{self, Read, Write};
+use std::io::{self, stdout, stdin, Read, Write};
 use std::path::{Path, PathBuf};
 
+use clipboard::{ClipboardContext, ClipboardProvider};
 use clap::Parser;
 
 /// The default path to the main safe storage
@@ -53,14 +56,83 @@ fn add_line_to_file(file_path: &Path, content: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn get_all_safe_keys(file_path: &Path) {
+fn get_all_safe_keys(file_path: &Path) -> HashMap<String, String> {
     let content = read_to_string(file_path).expect("Unable to read file");
-    println!("{}", content);
+    let mut keys_map = HashMap::new();
+
+    for line in content.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+
+        if let Some((key_part, value_part)) = line.split_once('=') {
+            let value = value_part.trim_end_matches(';').to_string();
+            let key = key_part.trim().to_string();
+
+            keys_map.insert(key, value);
+        } else {
+            eprintln!("Warning: Invalid line format: {}", line);
+        }
+    }
+
+    println!("Returning keys map: {:?}", keys_map);
+    keys_map
 }
 
 fn handle_search(file_path: &Path, key_pattern: String) {
     println!("Looking for password of pattern: {}", key_pattern.to_string());
-    get_all_safe_keys(file_path);
+
+    let keys_map = get_all_safe_keys(file_path);
+
+    let re = Regex::new(&key_pattern).expect("Invalid regex pattern");
+    let matching_keys: Vec<(&String, &String)> = keys_map
+        .iter()
+        .filter(|(key, _)| re.is_match(key))
+        .collect();
+
+    let num_matches = matching_keys.len();
+
+    if num_matches == 0 {
+        println!("No matching keys found.");
+    } else if num_matches == 1 {
+        let (key, password) = matching_keys[0];
+
+        println!("Found one matching key: '{}'", key);
+        print!("Do you want to retrieve the password? (y/N): ");
+        stdout().flush().expect("Failed to flush stdout");
+
+        let mut input = String::new();
+        stdin()
+            .read_line(&mut input)
+            .expect("Failed to read input");
+
+        let input = input.trim().to_lowercase();
+        if input == "y" || input == "yes" || input == "Yes" || input == "Y" {
+            println!("Password for '{}': '{}'", key, password);
+
+            if copy_to_clipboard(password).is_ok() {
+                println!("Password for '{}' has been copied to clipboard", key);
+            }
+        } else {
+            println!("Password retrieval canceled.");
+        }
+    } else {
+        println!("Multiple matching keys found: ");
+        for (key, _) in &matching_keys {
+            println!("- {}", key);
+        }
+
+        println!("Please provide a more specific pattern to narrow down the search.");
+    }
+
+
+    //let found_keys = vec![];
+    //
+    //for (key, password) in keys_map.iter() {
+    //    if key.contains(&key_pattern) {
+    //        println!("Found key: '{}', password: '{}'", key, password);
+    //    }
+    //}
 }
 
 fn handle_add_key(file_path: &Path, key: String, password: String) {
@@ -68,6 +140,12 @@ fn handle_add_key(file_path: &Path, key: String, password: String) {
 
     let encrypted_line = format!("{}={};", key, password);
     add_line_to_file(file_path, &encrypted_line);
+}
+
+fn copy_to_clipboard(text: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut ctx: ClipboardContext = ClipboardProvider::new()?;
+    ctx.set_contents(text.to_owned())?;
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
