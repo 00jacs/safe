@@ -79,10 +79,8 @@ fn get_all_safe_keys(file_path: &Path) -> HashMap<String, String> {
     keys_map
 }
 
-fn handle_search(file_path: &Path, key_pattern: String) {
+fn handle_search(keys_map: HashMap<String, String>, key_pattern: String) {
     println!("Looking for password of pattern: {}", key_pattern.to_string());
-
-    let keys_map = get_all_safe_keys(file_path);
 
     let re = Regex::new(&key_pattern).expect("Invalid regex pattern");
     let matching_keys: Vec<(&String, &String)> = keys_map
@@ -123,16 +121,15 @@ fn handle_search(file_path: &Path, key_pattern: String) {
         }
 
         println!("Please provide a more specific pattern to narrow down the search.");
+
+        let mut input = String::new();
+        stdin()
+            .read_line(&mut input)
+            .expect("Failed to read input");
+
+        let input = input.trim();
+        handle_search(keys_map, input.to_string());
     }
-
-
-    //let found_keys = vec![];
-    //
-    //for (key, password) in keys_map.iter() {
-    //    if key.contains(&key_pattern) {
-    //        println!("Found key: '{}', password: '{}'", key, password);
-    //    }
-    //}
 }
 
 fn handle_add_key(file_path: &Path, key: String, password: String) {
@@ -170,7 +167,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             handle_add_key(file_path, String::from(args.key), String::from(args.password))
         },
         "search" => {
-            handle_search(file_path, String::from(args.pattern));
+            let keys_map = get_all_safe_keys(file_path);
+            handle_search(keys_map, String::from(args.pattern));
         },
         _ => {
             println!("Not matched...");
